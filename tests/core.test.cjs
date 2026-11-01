@@ -1,0 +1,13 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+global.window=global;
+for(const name of ['spectrum-data.js','core.js','chart.js','export.js'])vm.runInThisContext(fs.readFileSync(path.join(__dirname,'../assets',name),'utf8'));
+const C=SolarCore,data=SOLAR_DATA;
+const near=(a,b,t=1e-9)=>assert.ok(Math.abs(a-b)<t,`${a} != ${b}`);
+test('full range and independently verified reference totals',()=>{near(C.calculate(data,280,4000,'AM1.5G').total,1000.370655573442);near(C.calculate(data,280,4000,'AM1.5D').total,900.139329284215);assert.equal(C.calculate(data,280,4000,'AM1.5G').percent,100);});
+test('narrow band agrees with desktop implementation',()=>{const r=C.calculate(data,350,400,'AM1.5G');near(r.band,32.328605);near(r.percent,3.23166266622128);});
+test('fractional boundaries and additivity',()=>{for(const c of [1,2]){near(C.integrate(data,280,350.37,c)+C.integrate(data,350.37,4000,c),C.integrate(data,280,4000,c));const a=350.1,b=350.4;near(C.integrate(data,a,b,c),(b-a)*(C.value(data,a,c)+C.value(data,b,c))/2);}});
+test('invalid ranges are rejected',()=>{for(const [a,b] of [[400,350],[350,350],[279,400],[280,4001],[NaN,400],[280,Infinity]])assert.throws(()=>C.calculate(data,a,b,'AM1.5G'));});
+test('size conversion and mobile memory limits',()=>{let d=C.dimensions(16,10,'cm',300);assert.equal(d.wp,1890);assert.equal(d.hp,1181);assert.equal(C.dimensions(1200,800,'px',150).wp,1200);assert.throws(()=>C.dimensions(60,60,'cm',1200));assert.throws(()=>C.dimensions(16,10,'cm',NaN));});
+test('SVG records physical size and full-resolution path',()=>{let r=C.calculate(data,350,400,'AM1.5G'),d=C.dimensions(16,10,'cm',300),s=SolarChart.chartSVG(data,r,false,d.wi*96,d.hi*96,d);assert.ok(s.includes(`width="${d.wi}in"`));assert.ok(s.includes('350–400'));assert.ok(s.length>30000);});
+test('PDF offsets and MediaBox are valid',async()=>{let d=C.dimensions(16,10,'cm',300);let blob=SolarExport.makePDF(new Uint8Array([255,216,255,217]),d);let s=await blob.text();assert.ok(s.includes(`/MediaBox [0 0 ${d.wi*72} ${d.hi*72}]`));const start=Number(s.match(/startxref\n(\d+)/)[1]);assert.equal(s.slice(start,start+4),'xref');});
+test('PNG DPI metadata matches requested DPI',()=>{const png=Uint8Array.from(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aO6kAAAAASUVORK5CYII=','base64'));const b=SolarExport.pngDPI(png,300);let p=8,found=false;while(p<b.length){let n=new DataView(b.buffer,p,4).getUint32(0),type=Buffer.from(b.slice(p+4,p+8)).toString();if(type==='pHYs'){found=true;assert.equal(new DataView(b.buffer,p+8,4).getUint32(0),11811);}p+=n+12;}assert.ok(found);});

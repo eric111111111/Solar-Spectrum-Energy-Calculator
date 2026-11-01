@@ -1,0 +1,10 @@
+(function(root){
+'use strict';
+function validate(a,b){if(!Number.isFinite(a)||!Number.isFinite(b))throw Error('Enter a number for both wavelength limits.');if(a>=b)throw Error('The lower limit must be smaller than the upper limit.');if(a<280||b>4000)throw Error('Keep both limits within 280–4000 nm.');}
+function value(data,x,col){let l=0,r=data.length-1;while(l<r){let m=(l+r)>>1;if(data[m][0]<x)l=m+1;else r=m;}if(data[l][0]===x)return data[l][col];let a=data[l-1],b=data[l];return a[col]+(b[col]-a[col])*(x-a[0])/(b[0]-a[0]);}
+function interval(data,a,b,col){validate(a,b);return [[a,value(data,a,col)],...data.filter(r=>r[0]>a&&r[0]<b).map(r=>[r[0],r[col]]),[b,value(data,b,col)]];}
+function integrate(data,a,b,col){const p=interval(data,a,b,col);let sum=0,comp=0;for(let i=1;i<p.length;i++){let v=(p[i][0]-p[i-1][0])*(p[i][1]+p[i-1][1])/2-comp;let t=sum+v;comp=(t-sum)-v;sum=t;}return sum;}
+function calculate(data,a,b,kind){validate(a,b);if(!['AM1.5G','AM1.5D'].includes(kind))throw Error('Unknown spectrum.');let col=kind==='AM1.5G'?1:2;let band=integrate(data,a,b,col),total=integrate(data,280,4000,col);return {kind,lo:a,hi:b,band,total,percent:100*band/total,col};}
+function dimensions(w,h,unit,dpi){if(![w,h,dpi].every(Number.isFinite)||w<=0||h<=0)throw Error('Enter positive width and height values.');if(dpi<72||dpi>1200||!Number.isInteger(dpi))throw Error('DPI must be an integer between 72 and 1200.');if(!['cm','in','px'].includes(unit))throw Error('Unknown size unit.');const wi=unit==='cm'?w/2.54:unit==='px'?w/dpi:w,hi=unit==='cm'?h/2.54:unit==='px'?h/dpi:h;const wp=Math.round(wi*dpi),hp=Math.round(hi*dpi);if(wi<1.96||hi<1.96||wi>24||hi>24)throw Error('Each physical dimension must be about 5–61 cm (2–24 in).');if(wp*hp>16000000||Math.max(wp,hp)>8192)throw Error('Reduce size or DPI: maximum 16 megapixels and 8192 px per side.');return {wi,hi,wp,hp,dpi};}
+root.SolarCore={validate,value,interval,integrate,calculate,dimensions};
+})(typeof window==='undefined'?globalThis:window);
